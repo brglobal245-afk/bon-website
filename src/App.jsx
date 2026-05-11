@@ -47,7 +47,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={bonTheme} modalSize="compact">
           <ToastProvider>
-            <BrowserRouter>
+            <BrowserRouter basename={import.meta.env.BASE_URL}>
               <Navbar />
               <WrongNetworkBanner />
 
