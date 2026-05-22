@@ -1,21 +1,24 @@
 import React, { useState } from 'react'
-import { NavLink, Link } from 'react-router-dom'
+import { NavLink, Link, useLocation } from 'react-router-dom'
 import { useAccount, useDisconnect } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { Menu, X, Zap } from 'lucide-react'
 
 const NAV_LINKS = [
   { to: '/', label: 'Home', end: true },
-  { to: '/create', label: 'Create Token' },
-  { to: '/liquidity', label: 'Liquidity' },
+  { to: '/markets', label: 'Markets' },
   { to: '/swap', label: 'Swap' },
-  { to: '/explore', label: 'Explore' },
+  { to: '/liquidity', label: 'Liquidity' },
+  { to: '/portfolio', label: 'Portfolio' },
   { to: '/launchpad', label: 'Launchpad' },
 ]
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { address, isConnected } = useAccount()
+  const location = useLocation()
+
+  if (location.pathname === '/swap') return null
 
   return (
     <>

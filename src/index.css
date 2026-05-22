@@ -1,22 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @import "tailwindcss";
 
 @theme {
   --color-bg-base: #080A0F;
-  --color-bg-card: #0C0F17;
-  --color-bg-input: #111520;
+  --color-bg-card: #0D1018;
+  --color-bg-input: #12151E;
   --color-border: rgba(255,255,255,0.06);
-  --color-gold: #F0A500;
-  --color-orange: #FF6B00;
-  --color-success: #00C076;
-  --color-error: #FF3B5C;
-  --color-text-primary: #E8EAF2;
-  --color-text-secondary: #8892A4;
-  --color-text-muted: #404858;
+  --color-border2: rgba(255,255,255,0.10);
+  --color-gold: #F5A623;
+  --color-orange: #F5A623;
+  --color-orange-dim: rgba(245,166,35,0.12);
+  --color-success: #00D084;
+  --color-green: #00D084;
+  --color-green-dim: rgba(0,208,132,0.12);
+  --color-error: #FF4757;
+  --color-red: #FF4757;
+  --color-red-dim: rgba(255,71,87,0.12);
+  --color-text-primary: #F0F2F8;
+  --color-text-secondary: #8B91A8;
+  --color-text-muted: #555D75;
+  --color-text-tertiary: #555D75;
 
   --font-heading: 'Space Grotesk', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-mono: 'Space Mono', monospace;
+  --font-sans: system-ui, sans-serif;
 }
 
 *, *::before, *::after {
@@ -517,5 +525,79 @@ body {
 }
 
 .number {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Space Mono', monospace;
+}
+
+/* Custom CEX Scrollbars */
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+
+/* Ticker continuous scrolling animation */
+@keyframes ticker-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.ticker-wrap {
+  overflow: hidden;
+  width: 100%;
+}
+
+.ticker-content {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 45s linear infinite;
+}
+
+.ticker-content:hover {
+  animation-play-state: paused;
+}
+
+/* Remove default focus styling from inputs */
+input:focus, select:focus, textarea:focus, button:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Chrome, Safari, Edge, Opera: remove numeric arrows */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* Firefox: remove numeric arrows */
+input[type=number] {
+  -moz-appearance: textfield;
 }

@@ -16,6 +16,7 @@ import Liquidity from './pages/Liquidity'
 import Swap from './pages/Swap'
 import Explore from './pages/Explore'
 import Launchpad from './pages/Launchpad'
+import Portfolio from './pages/Portfolio'
 
 import { BON_CHAIN, WALLETCONNECT_PROJECT_ID } from './config'
 
@@ -57,7 +58,11 @@ export default function App() {
                 <Route path="/liquidity" element={<Liquidity />} />
                 <Route path="/swap" element={<Swap />} />
                 <Route path="/explore" element={<Explore />} />
-                <Route path="/portfolio" element={<Navigate to="/" replace />} />
+                <Route path="/markets" element={<Explore />} />
+                <Route path="/futures" element={<Navigate to="/swap?mode=futures" replace />} />
+                <Route path="/options" element={<Navigate to="/swap?mode=options" replace />} />
+                <Route path="/stake" element={<Navigate to="/swap?mode=stake" replace />} />
+                <Route path="/portfolio" element={<Portfolio />} />
                 <Route path="/launchpad" element={<Launchpad />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

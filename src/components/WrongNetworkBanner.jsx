@@ -1,4 +1,5 @@
 import React from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { AlertTriangle } from 'lucide-react'
 import { BON_CHAIN } from '../config'
@@ -7,7 +8,9 @@ export default function WrongNetworkBanner() {
   const { isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
+  const location = useLocation()
 
+  if (location.pathname === '/swap') return null
   if (!isConnected || chainId === BON_CHAIN.id) return null
 
   return (

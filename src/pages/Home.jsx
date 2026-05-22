@@ -98,9 +98,8 @@ export default function Home() {
           </div>
 
           {/* Headline */}
-          <h1 className="section-title" style={{ fontSize: 'clamp(32px, 5vw, 56px)', lineHeight: 1.15, marginBottom: 20, maxWidth: 700, margin: '0 auto 20px' }}>
-            The Open Network for{' '}
-            <span className="gradient-gold-text">Everyone</span>
+          <h1 className="section-title" style={{ fontSize: 'clamp(32px, 5vw, 56px)', lineHeight: 1.15, marginBottom: 20, maxWidth: 750, margin: '0 auto 20px' }}>
+            Bhardwaj <span className="gradient-gold-text">Open Network for Everyone</span>
           </h1>
 
           <p style={{ fontSize: 16, color: '#8892A4', maxWidth: 540, margin: '0 auto 36px', lineHeight: 1.7 }}>

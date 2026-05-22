@@ -1,18 +1,7 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, TrendingUp, Flame, Star, TrendingDown, ArrowUpDown } from 'lucide-react'
-
-// Demo token data — replace with live on-chain data from TokenCreated events
-const DEMO_TOKENS = [
-  { rank: 1, name: 'BON Token', symbol: 'BON', price: 0.09624, change24h: 8.42, volume24h: 482000, mcap: 9624000, color: '#F0A500', trending: true },
-  { rank: 2, name: 'BON USDT', symbol: 'USDT', price: 1.00, change24h: 0.01, volume24h: 920000, mcap: 5000000, color: '#26A17B', trending: false },
-  { rank: 3, name: 'Ethereum', symbol: 'ETH', price: 3420.50, change24h: 3.21, volume24h: 720000, mcap: 41000000, color: '#627EEA', trending: true },
-  { rank: 4, name: 'MoonShot', symbol: 'MOON', price: 0.00482, change24h: 142.8, volume24h: 248000, mcap: 482000, color: '#A78BFA', trending: true, new: true },
-  { rank: 5, name: 'DeFi Gold', symbol: 'DFG', price: 0.1820, change24h: -12.4, volume24h: 84000, mcap: 1820000, color: '#38BDF8', trending: false },
-  { rank: 6, name: 'Rocket X', symbol: 'RKT', price: 0.00021, change24h: 68.2, volume24h: 124000, mcap: 210000, color: '#FF6B00', trending: true, new: true },
-  { rank: 7, name: 'SafeStable', symbol: 'SAFE', price: 0.9940, change24h: -0.08, volume24h: 52000, mcap: 994000, color: '#00C076', trending: false },
-  { rank: 8, name: 'BON Chain AI', symbol: 'BONAI', price: 0.00842, change24h: -28.4, volume24h: 36000, mcap: 842000, color: '#F472B6', trending: false },
-]
+import { subscribeToTokens } from '../services/tokenService'
 
 function fmt(n) {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
@@ -28,14 +17,26 @@ function fmtPrice(n) {
 
 export default function Explore() {
   const navigate = useNavigate()
+  const [tokens, setTokens] = useState([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [sortBy, setSortBy] = useState('mcap')
   const [sortDir, setSortDir] = useState('desc')
-  const [loading] = useState(false)
+
+  useEffect(() => {
+    const unsub = subscribeToTokens((data) => {
+      setTokens(data)
+      setLoading(false)
+    })
+    return () => unsub()
+  }, [])
 
   const filtered = useMemo(() => {
-    let list = DEMO_TOKENS.filter(t =>
+    let list = tokens.map(t => ({
+      ...t,
+      mcap: t.mcap || (t.price * 100000000)
+    })).filter(t =>
       t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.symbol.toLowerCase().includes(search.toLowerCase())
     )
@@ -45,12 +46,12 @@ export default function Explore() {
     if (filter === 'losers') list = list.filter(t => t.change24h < 0).sort((a, b) => a.change24h - b.change24h)
     if (filter === 'all') {
       list = list.sort((a, b) => {
-        const av = a[sortBy], bv = b[sortBy]
+        const av = a[sortBy] || 0, bv = b[sortBy] || 0
         return sortDir === 'desc' ? bv - av : av - bv
       })
     }
     return list
-  }, [search, filter, sortBy, sortDir])
+  }, [tokens, search, filter, sortBy, sortDir])
 
   const toggleSort = (col) => {
     if (sortBy === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
