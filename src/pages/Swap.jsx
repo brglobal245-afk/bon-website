@@ -9,7 +9,8 @@ import {
   ExternalLink, ArrowUpRight, Flame, Database, Plus,
   ShieldAlert, HelpCircle, ChevronRight, RefreshCw, BarChart2,
   Hourglass, ShieldCheck, Timer, ChevronDown,
-  Percent, Calendar, AlertTriangle, Lock, Zap
+  Percent, Calendar, AlertTriangle, Lock, Zap,
+  Sun, Moon
 } from 'lucide-react'
 import { auth, db, isFirebaseConfigured } from '../firebase'
 import { useToast } from '../context/ToastContext'
@@ -160,6 +161,13 @@ export default function Swap() {
 
   // Active Bottom Tab
   const [bottomTab, setBottomTab] = useState('trades') // trades, portfolio, positions, options, stakes
+
+  // Theme
+  const [lightMode, setLightMode] = useState(false)
+
+  // Options chain filters + countdown
+  const [optionsFilter, setOptionsFilter] = useState({ aroundATM: true, strikeRange: false, strikeDistance: false, expectedRange: false })
+  const [chainCountdown, setChainCountdown] = useState('--:--:--')
 
   // Local/Simulated balances stored persistently
   const [balances, setBalances] = useState({
@@ -846,6 +854,77 @@ export default function Swap() {
     return amt * (stakingPlanSelected.apy / 100) * (stakeLockupDays / 365)
   }, [stakeAmount, stakingPlanSelected, stakeLockupDays])
 
+  // ── Theme color palette ──────────────────────────────────────
+  const c = lightMode ? {
+    bg: '#EEF0F6', bg2: '#FFFFFF', bg3: '#E2E6EF',
+    text: '#131523', text2: '#4A5068', muted: '#8B91A8',
+    border: 'rgba(0,0,0,0.08)', border2: 'rgba(0,0,0,0.04)'
+  } : {
+    bg: '#080A0F', bg2: '#0D1018', bg3: '#12151E',
+    text: '#F0F2F8', text2: '#8B91A8', muted: '#555D75',
+    border: 'rgba(255,255,255,0.06)', border2: 'rgba(255,255,255,0.04)'
+  }
+
+  // ── Options chain mock data ──────────────────────────────────
+  const optionsChainData = useMemo(() => {
+    if (!selectedToken) return []
+    const price = selectedToken.price
+    const offsets = [-0.20, -0.15, -0.10, -0.07, -0.05, -0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03, 0.05, 0.07, 0.10, 0.15, 0.20]
+    return offsets.map(offset => {
+      const strike = price * (1 + offset)
+      const isATM = offset === 0
+      const baseIV = 30 + Math.abs(offset) * 180
+      const callDelta = Math.max(0.01, Math.min(0.99, 0.5 + (-offset) * 2.5)).toFixed(5)
+      const putDelta = Math.max(0.01, Math.min(0.99, 0.5 - (-offset) * 2.5)).toFixed(5)
+      const markIV = (baseIV + (Math.random() - 0.5) * 3).toFixed(1)
+      const callMarkRaw = offset < 0 ? price * Math.max(0, (-offset - 0.004) * 0.9) : 0
+      const putMarkRaw = offset > 0 ? price * Math.max(0, (offset - 0.004) * 0.9) : 0
+      const callMarkPrice = callMarkRaw > 0 ? callMarkRaw.toFixed(6) : '0.0000'
+      const putMarkPrice = putMarkRaw > 0 ? putMarkRaw.toFixed(6) : '0.0000'
+      return {
+        strike, isATM,
+        call: {
+          askSize: offset < -0.005 ? (Math.random() * 35 + 1).toFixed(2) : '0.00',
+          bidSize: offset < -0.005 ? (Math.random() * 35 + 1).toFixed(2) : '0.00',
+          openUsdt: offset < -0.005 ? (Math.random() * 4500000 + 100).toFixed(0) : '0',
+          delta: callDelta, markPrice: callMarkPrice, markIV,
+          bidPrice: callMarkRaw > 0 ? (callMarkRaw * 0.96).toFixed(6) : '0.0000',
+          bidIV: (parseFloat(markIV) - 0.6).toFixed(1),
+          askPrice: callMarkRaw > 0 ? (callMarkRaw * 1.04).toFixed(6) : '0.0000',
+          askIV: (parseFloat(markIV) + 0.6).toFixed(1),
+          position: Math.random() > 0.75 ? Math.floor(Math.random() * 300) : 0,
+        },
+        put: {
+          askSize: offset > 0.005 ? (Math.random() * 35 + 1).toFixed(2) : '0.00',
+          bidSize: offset > 0.005 ? (Math.random() * 35 + 1).toFixed(2) : '0.00',
+          openUsdt: offset > 0.005 ? (Math.random() * 4500000 + 100).toFixed(0) : '0',
+          delta: putDelta, markPrice: putMarkPrice, markIV,
+          bidPrice: putMarkRaw > 0 ? (putMarkRaw * 0.96).toFixed(6) : '0.0000',
+          bidIV: (parseFloat(markIV) - 0.6).toFixed(1),
+          askPrice: putMarkRaw > 0 ? (putMarkRaw * 1.04).toFixed(6) : '0.0000',
+          askIV: (parseFloat(markIV) + 0.6).toFixed(1),
+          position: Math.random() > 0.75 ? Math.floor(Math.random() * 300) : 0,
+        }
+      }
+    })
+  }, [selectedToken?.symbol])
+
+  // Countdown for options chain expiry
+  useEffect(() => {
+    if (tradingMode !== 'options') return
+    let seconds = Math.max(60, parseInt(optionsExpiry) * 60)
+    const update = () => {
+      const h = Math.floor(seconds / 3600)
+      const m = Math.floor((seconds % 3600) / 60)
+      const s = seconds % 60
+      setChainCountdown(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`)
+      if (seconds > 0) seconds--
+    }
+    update()
+    const timer = setInterval(update, 1000)
+    return () => clearInterval(timer)
+  }, [tradingMode, optionsExpiry])
+
   if (loading || !selectedToken) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', backgroundColor: '#080A0F', color: '#F0F2F8', gap: 12 }}>
@@ -856,7 +935,7 @@ export default function Swap() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#080A0F', color: '#F0F2F8', fontFamily: 'system-ui, sans-serif', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: c.bg, color: c.text, fontFamily: 'system-ui, sans-serif', overflow: 'hidden', transition: 'background-color 0.3s, color 0.3s' }}>
       
       {/* 1. TOP NAVBAR (56px) */}
       <div style={{ height: 56, minHeight: 56, borderBottom: '1px solid rgba(255,255,255,0.06)', backgroundColor: '#0D1018', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', zIndex: 10 }}>
@@ -911,6 +990,24 @@ export default function Swap() {
 
         {/* Right: Connect Wallet & Badge */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Light/Dark toggle */}
+          <button
+            onClick={() => setLightMode(prev => !prev)}
+            title={lightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            style={{
+              width: 34, height: 28,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backgroundColor: lightMode ? '#F5A623' : '#12151E',
+              border: '1px solid ' + (lightMode ? 'transparent' : 'rgba(255,255,255,0.08)'),
+              borderRadius: 7, cursor: 'pointer',
+              color: lightMode ? '#000' : '#8B91A8',
+              transition: 'all 0.2s', flexShrink: 0
+            }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '0.85' }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+          >
+            {lightMode ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
           {/* Badge */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
@@ -963,15 +1060,18 @@ export default function Swap() {
                           type="button" 
                           style={{
                             backgroundColor: '#F5A623',
-                            color: '#080A0F',
+                            color: '#000',
                             border: 'none',
-                            borderRadius: 6,
-                            padding: '6px 12px',
-                            fontSize: 11,
-                            fontWeight: 700,
+                            borderRadius: 10,
+                            padding: '14px',
+                            fontSize: 13,
+                            fontWeight: 800,
+                            letterSpacing: '0.05em',
                             cursor: 'pointer',
-                            transition: 'opacity 0.2s'
+                            transition: 'filter 0.2s'
                           }}
+                          onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                          onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1)'}
                         >
                           Connect Wallet
                         </button>
@@ -1027,7 +1127,7 @@ export default function Swap() {
       </div>
 
       {/* 2. TICKER BAR (36px) */}
-      <div className="ticker-wrap" style={{ height: 36, minHeight: 36, borderBottom: '1px solid rgba(255,255,255,0.06)', backgroundColor: '#0D1018', display: 'flex', alignItems: 'center' }}>
+      <div className="ticker-wrap" style={{ height: 36, minHeight: 36, borderBottom: '1px solid ' + c.border, backgroundColor: c.bg2, display: 'flex', alignItems: 'center' }}>
         <div className="ticker-content" style={{ display: 'flex', gap: 24, paddingLeft: 24 }}>
           {[...tokens, ...tokens, ...tokens, ...tokens].map((t, idx) => (
             <div 
@@ -1058,7 +1158,7 @@ export default function Swap() {
       <div style={{ display: 'flex', flex: 1, height: 'calc(100vh - 56px - 36px)', width: '100%', overflow: 'hidden' }}>
         
         {/* COLUMN 1: LEFT MARKET LIST (260px) */}
-        <div style={{ width: 260, minWidth: 260, borderRight: '1px solid rgba(255,255,255,0.06)', backgroundColor: '#0D1018', display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div style={{ width: 260, minWidth: 260, borderRight: '1px solid ' + c.border, backgroundColor: c.bg2, display: 'flex', flexDirection: 'column', height: '100%' }}>
           
           {/* Header search & pills */}
           <div style={{ padding: 12, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1292,8 +1392,108 @@ export default function Swap() {
           </div>
 
           {/* Chart Area */}
-          <div style={{ flex: 1, backgroundColor: '#080A0F', position: 'relative', overflow: 'hidden' }}>
-            {chartHistory.length === 0 ? (
+          <div style={{ flex: 1, backgroundColor: c.bg, position: 'relative', overflow: 'hidden' }}>
+            {tradingMode === 'options' ? (
+              /* ── OPTIONS CHAIN TABLE ─────────────────────────── */
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+                {/* Filter Bar */}
+                <div style={{ padding: '6px 12px', backgroundColor: c.bg2, borderBottom: '1px solid ' + c.border, display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: 16, fontSize: 10, color: c.muted }}>
+                    {[['aroundATM', 'Around ATM'], ['strikeRange', 'Strike Range'], ['strikeDistance', 'Strike to Index Price Distance'], ['expectedRange', 'Expected Price Range']].map(([key, label]) => (
+                      <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}>
+                        <input type="checkbox" checked={optionsFilter[key]} onChange={e => setOptionsFilter(prev => ({ ...prev, [key]: e.target.checked }))} style={{ accentColor: '#F5A623', cursor: 'pointer' }} />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ marginLeft: 'auto', fontSize: 10, color: c.muted, whiteSpace: 'nowrap' }}>
+                    Time to Expiry: <span style={{ color: '#F5A623', fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{chainCountdown}</span> ({optionsExpiry === '1440' ? 'Daily' : optionsExpiry === '60' ? '1 Hour' : optionsExpiry + ' Min'})
+                  </div>
+                </div>
+
+                {/* ATM Info Bar */}
+                <div style={{ padding: '5px 12px', backgroundColor: c.bg2, borderBottom: '1px solid ' + c.border, display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', flexShrink: 0 }}>
+                  <span style={{ fontWeight: 700, fontSize: 12, color: '#00D084', letterSpacing: '0.05em' }}>Calls</span>
+                  <span style={{ fontSize: 10, color: c.muted, textAlign: 'center' }}>
+                    {selectedToken.symbol} Price:&nbsp;<span style={{ color: c.text, fontFamily: "'Space Mono', monospace", fontWeight: 600 }}>{fmtPrice(selectedToken.price)}</span>
+                    &nbsp;&nbsp;|&nbsp;&nbsp;
+                    ATM Vol:&nbsp;<span style={{ color: '#F5A623', fontWeight: 700 }}>32.9%</span>
+                  </span>
+                  <span style={{ fontWeight: 700, fontSize: 12, color: '#FF4757', letterSpacing: '0.05em', textAlign: 'right' }}>Puts</span>
+                </div>
+
+                {/* Column Headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr 1fr 1.3fr 1.1fr 0.7fr 1.1fr 0.7fr 1.1fr 1.3fr 1.3fr 1fr 1.4fr 1fr', backgroundColor: c.bg2, borderBottom: '1px solid ' + c.border, padding: '5px 10px', fontSize: 9, color: c.muted, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.04em', flexShrink: 0 }}>
+                  <span>Ask Size</span>
+                  <span>Bid Size</span>
+                  <span>Open (BON)</span>
+                  <span>Delta</span>
+                  <span style={{ color: '#00D084' }}>Mark/IV</span>
+                  <span style={{ color: '#00D084' }}>Bid/IV</span>
+                  <span>Pos.</span>
+                  <span style={{ textAlign: 'center', color: c.text, fontWeight: 700, fontSize: 10 }}>Strike</span>
+                  <span>Pos.</span>
+                  <span style={{ color: '#FF4757' }}>Bid/IV</span>
+                  <span style={{ color: '#FF4757' }}>Mark/IV</span>
+                  <span style={{ color: '#FF4757' }}>Ask/IV</span>
+                  <span>Delta</span>
+                  <span>Open (BON)</span>
+                  <span>Ask Size</span>
+                </div>
+
+                {/* Scrollable Rows */}
+                <div className="scrollbar-thin" style={{ flex: 1, overflowY: 'auto' }}>
+                  {optionsChainData.map((row, idx) => {
+                    const rowBg = row.isATM
+                      ? (lightMode ? 'rgba(59,130,246,0.10)' : 'rgba(59,130,246,0.08)')
+                      : idx % 2 === 0 ? 'transparent' : (lightMode ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.012)');
+                    const colGrid = '1fr 1fr 1.4fr 1fr 1.3fr 1.1fr 0.7fr 1.1fr 0.7fr 1.1fr 1.3fr 1.3fr 1fr 1.4fr 1fr';
+                    return (
+                      <div key={idx} style={{ display: 'grid', gridTemplateColumns: colGrid, padding: '4px 10px', backgroundColor: rowBg, borderBottom: '1px solid ' + c.border2, fontSize: 10, fontFamily: "'Space Mono', monospace", cursor: 'pointer', alignItems: 'center' }}>
+                        {/* CALLS */}
+                        <span style={{ color: '#FF4757' }}>{row.call.askSize}</span>
+                        <span style={{ color: '#00D084' }}>{row.call.bidSize}</span>
+                        <span style={{ color: c.text2, fontSize: 9 }}>{parseInt(row.call.openUsdt || 0).toLocaleString('en')}</span>
+                        <span style={{ color: '#00D084' }}>{row.call.delta}</span>
+                        <span style={{ color: '#00D084', lineHeight: 1.4 }}>
+                          {row.call.markPrice !== '0.0000' ? row.call.markPrice : '--'}<br/>
+                          <span style={{ fontSize: 8, color: c.muted }}>{row.call.markIV}%</span>
+                        </span>
+                        <span style={{ color: c.text2, lineHeight: 1.4 }}>
+                          {row.call.bidPrice !== '0.0000' ? row.call.bidPrice : '--'}<br/>
+                          <span style={{ fontSize: 8, color: c.muted }}>{row.call.bidIV}%</span>
+                        </span>
+                        <span style={{ color: row.call.position > 0 ? '#F5A623' : c.muted }}>{row.call.position > 0 ? row.call.position : '--'}</span>
+
+                        {/* STRIKE */}
+                        <span style={{ textAlign: 'center', fontWeight: 700, color: row.isATM ? '#3B82F6' : c.text, background: row.isATM ? 'rgba(59,130,246,0.18)' : 'transparent', borderRadius: 3, padding: '1px 4px', display: 'block', fontSize: 10 }}>
+                          {fmtPrice(row.strike)}
+                        </span>
+
+                        {/* PUTS */}
+                        <span style={{ color: row.put.position > 0 ? '#F5A623' : c.muted }}>{row.put.position > 0 ? row.put.position : '--'}</span>
+                        <span style={{ color: c.text2, lineHeight: 1.4 }}>
+                          {row.put.bidPrice !== '0.0000' ? row.put.bidPrice : '--'}<br/>
+                          <span style={{ fontSize: 8, color: c.muted }}>{row.put.bidIV}%</span>
+                        </span>
+                        <span style={{ color: '#FF4757', lineHeight: 1.4 }}>
+                          {row.put.markPrice !== '0.0000' ? row.put.markPrice : '--'}<br/>
+                          <span style={{ fontSize: 8, color: c.muted }}>{row.put.markIV}%</span>
+                        </span>
+                        <span style={{ color: '#FF4757', lineHeight: 1.4 }}>
+                          {row.put.askPrice !== '0.0000' ? row.put.askPrice : '--'}<br/>
+                          <span style={{ fontSize: 8, color: c.muted }}>{row.put.askIV}%</span>
+                        </span>
+                        <span style={{ color: '#FF4757' }}>{row.put.delta}</span>
+                        <span style={{ color: c.text2, fontSize: 9 }}>{parseInt(row.put.openUsdt || 0).toLocaleString('en')}</span>
+                        <span style={{ color: '#FF4757' }}>{row.put.askSize}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : chartHistory.length === 0 ? (
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <Loader2 className="animate-spin" style={{ color: '#F5A623' }} size={24} />
                 <span style={{ fontSize: 11, color: '#8B91A8' }}>Loading chart data...</span>
@@ -1308,7 +1508,7 @@ export default function Swap() {
           </div>
 
           {/* Bottom Live Trade Book / Balances (Fixed height 240px) */}
-          <div style={{ height: 240, minHeight: 240, borderTop: '1px solid rgba(255,255,255,0.06)', backgroundColor: '#0D1018', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ height: 240, minHeight: 240, borderTop: '1px solid ' + c.border, backgroundColor: c.bg2, display: 'flex', flexDirection: 'column' }}>
             
             {/* Bottom Section Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', backgroundColor: '#080A0F' }}>
@@ -1710,7 +1910,7 @@ export default function Swap() {
         </div>
 
         {/* COLUMN 3: RIGHT PANEL TERMINAL (300px) */}
-        <div style={{ width: 300, minWidth: 300, borderLeft: '1px solid rgba(255,255,255,0.06)', backgroundColor: '#0D1018', display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', padding: 16 }}>
+        <div style={{ width: 300, minWidth: 300, borderLeft: '1px solid ' + c.border, backgroundColor: c.bg2, display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', padding: 16 }}>
           {/* TERMINALS */}
           {tradingMode === 'spot' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 12 }}>
@@ -1723,13 +1923,13 @@ export default function Swap() {
                     padding: '8px 0',
                     borderRadius: 4,
                     fontSize: 11,
-                    fontWeight: 700,
+                    fontWeight: spotTab === 'buy' ? 700 : 400,
                     textTransform: 'uppercase',
                     cursor: 'pointer',
                     border: 'none',
-                    backgroundColor: spotTab === 'buy' ? 'rgba(0, 208, 132, 0.12)' : 'transparent',
-                    color: spotTab === 'buy' ? '#00D084' : '#8B91A8',
-                    borderBottom: spotTab === 'buy' ? '2px solid #00D084' : 'none'
+                    backgroundColor: spotTab === 'buy' ? 'rgba(0, 208, 132, 0.10)' : 'transparent',
+                    color: spotTab === 'buy' ? '#00D084' : '#555D75',
+                    borderBottom: spotTab === 'buy' ? '2px solid #00D084' : '2px solid transparent'
                   }}
                 >
                   Buy
@@ -1741,13 +1941,13 @@ export default function Swap() {
                     padding: '8px 0',
                     borderRadius: 4,
                     fontSize: 11,
-                    fontWeight: 700,
+                    fontWeight: spotTab === 'sell' ? 700 : 400,
                     textTransform: 'uppercase',
                     cursor: 'pointer',
                     border: 'none',
-                    backgroundColor: spotTab === 'sell' ? 'rgba(255, 71, 87, 0.12)' : 'transparent',
-                    color: spotTab === 'sell' ? '#FF4757' : '#8B91A8',
-                    borderBottom: spotTab === 'sell' ? '2px solid #FF4757' : 'none'
+                    backgroundColor: spotTab === 'sell' ? 'rgba(255, 71, 87, 0.10)' : 'transparent',
+                    color: spotTab === 'sell' ? '#FF4757' : '#555D75',
+                    borderBottom: spotTab === 'sell' ? '2px solid #FF4757' : '2px solid transparent'
                   }}
                 >
                   Sell
@@ -1755,19 +1955,19 @@ export default function Swap() {
               </div>
 
               {/* Order Type */}
-              <div style={{ display: 'flex', backgroundColor: '#12151E', padding: 2, borderRadius: 4, border: '1px solid rgba(255,255,255,0.04)' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
                 <button
                   onClick={() => setOrderType('market')}
                   style={{
                     flex: 1,
-                    padding: '4px 0',
-                    borderRadius: 3,
-                    fontSize: 10,
+                    padding: '5px 14px',
+                    borderRadius: 4,
+                    fontSize: 12,
                     fontWeight: 600,
-                    border: 'none',
                     cursor: 'pointer',
-                    backgroundColor: orderType === 'market' ? '#181C28' : 'transparent',
-                    color: orderType === 'market' ? '#F0F2F8' : '#8B91A8'
+                    border: orderType === 'market' ? '1px solid rgba(245,166,35,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                    backgroundColor: orderType === 'market' ? 'rgba(245,166,35,0.12)' : '#12151E',
+                    color: orderType === 'market' ? '#F5A623' : '#555D75'
                   }}
                 >
                   Market
@@ -1776,14 +1976,14 @@ export default function Swap() {
                   onClick={() => setOrderType('limit')}
                   style={{
                     flex: 1,
-                    padding: '4px 0',
-                    borderRadius: 3,
-                    fontSize: 10,
+                    padding: '5px 14px',
+                    borderRadius: 4,
+                    fontSize: 12,
                     fontWeight: 600,
-                    border: 'none',
                     cursor: 'pointer',
-                    backgroundColor: orderType === 'limit' ? '#181C28' : 'transparent',
-                    color: orderType === 'limit' ? '#F0F2F8' : '#8B91A8'
+                    border: orderType === 'limit' ? '1px solid rgba(245,166,35,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                    backgroundColor: orderType === 'limit' ? 'rgba(245,166,35,0.12)' : '#12151E',
+                    color: orderType === 'limit' ? '#F5A623' : '#555D75'
                   }}
                 >
                   Limit
@@ -1794,40 +1994,44 @@ export default function Swap() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {orderType === 'limit' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#8B91A8', textTransform: 'uppercase', marginBottom: 4 }}>Price (BON)</label>
-                    <input
-                      type="number"
-                      value={limitPrice}
-                      onChange={(e) => {
-                        setLimitPrice(e.target.value);
-                        const amt = parseFloat(spotAmount);
-                        const p = parseFloat(e.target.value);
-                        if (!isNaN(amt) && !isNaN(p)) setSpotTotal((amt * p).toFixed(4));
-                      }}
-                      style={{
-                        width: '100%',
-                        backgroundColor: '#12151E',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 6,
-                        padding: '10px 12px',
-                        fontSize: 12,
-                        color: '#F0F2F8',
-                        fontFamily: "'Space Mono', monospace"
-                      }}
-                    />
+                    <label style={{ display: 'block', fontSize: 10, color: '#555D75', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Price (BON)</label>
+                    <div style={{ background: '#12151E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', transition: 'border-color 0.2s' }}
+                      onFocus={e => e.currentTarget.style.borderColor = '#F5A623'}
+                      onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'}
+                    >
+                      <input
+                        type="number"
+                        value={limitPrice}
+                        onChange={(e) => {
+                          setLimitPrice(e.target.value);
+                          const amt = parseFloat(spotAmount);
+                          const p = parseFloat(e.target.value);
+                          if (!isNaN(amt) && !isNaN(p)) setSpotTotal((amt * p).toFixed(4));
+                        }}
+                        style={{
+                          width: '100%',
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          fontSize: 16,
+                          color: '#fff',
+                          fontFamily: "'Space Mono', monospace"
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
 
                 {orderType === 'market' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#8B91A8', textTransform: 'uppercase', marginBottom: 4 }}>Est. Price</label>
+                    <label style={{ display: 'block', fontSize: 10, color: '#555D75', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Est. Price</label>
                     <div style={{
                       width: '100%',
                       backgroundColor: '#12151E',
-                      border: '1px solid rgba(255,255,255,0.04)',
-                      borderRadius: 6,
-                      padding: '10px 12px',
-                      fontSize: 12,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 8,
+                      padding: '10px 14px',
+                      fontSize: 16,
                       color: '#8B91A8',
                       fontFamily: "'Space Mono', monospace"
                     }}>
@@ -1837,23 +2041,27 @@ export default function Swap() {
                 )}
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#8B91A8', textTransform: 'uppercase', marginBottom: 4 }}>Amount ({selectedToken?.symbol})</label>
-                  <input
-                    type="number"
-                    value={spotAmount}
-                    onChange={(e) => updateSpotAmount(e.target.value)}
-                    placeholder="0.00"
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#12151E',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      borderRadius: 6,
-                      padding: '10px 12px',
-                      fontSize: 12,
-                      color: '#F0F2F8',
-                      fontFamily: "'Space Mono', monospace"
-                    }}
-                  />
+                  <label style={{ display: 'block', fontSize: 10, color: '#555D75', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Amount ({selectedToken?.symbol})</label>
+                  <div style={{ background: '#12151E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center' }}
+                    onFocus={e => e.currentTarget.style.borderColor = '#F5A623'}
+                    onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'}
+                  >
+                    <input
+                      type="number"
+                      value={spotAmount}
+                      onChange={(e) => updateSpotAmount(e.target.value)}
+                      placeholder="0.00"
+                      style={{
+                        width: '100%',
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        fontSize: 16,
+                        color: '#fff',
+                        fontFamily: "'Space Mono', monospace"
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Percentage Sliders */}
@@ -1865,12 +2073,23 @@ export default function Swap() {
                       style={{
                         backgroundColor: '#12151E',
                         border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 4,
-                        padding: '4px 0',
-                        fontSize: 9,
+                        borderRadius: 6,
+                        padding: '6px 0',
+                        fontSize: 11,
                         fontFamily: "'Space Mono', monospace",
                         color: '#8B91A8',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        transition: 'background 0.15s, color 0.15s, border-color 0.15s'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = 'rgba(245,166,35,0.12)';
+                        e.currentTarget.style.color = '#F5A623';
+                        e.currentTarget.style.borderColor = 'rgba(245,166,35,0.3)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = '#12151E';
+                        e.currentTarget.style.color = '#8B91A8';
+                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
                       }}
                     >
                       {val * 100}%
@@ -1879,35 +2098,39 @@ export default function Swap() {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#8B91A8', textTransform: 'uppercase', marginBottom: 4 }}>Total (BON)</label>
-                  <input
-                    type="number"
-                    value={spotTotal}
-                    onChange={(e) => updateSpotTotal(e.target.value)}
-                    placeholder="0.00"
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#12151E',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      borderRadius: 6,
-                      padding: '10px 12px',
-                      fontSize: 12,
-                      color: '#F0F2F8',
-                      fontFamily: "'Space Mono', monospace"
-                    }}
-                  />
+                  <label style={{ display: 'block', fontSize: 10, color: '#555D75', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Total (BON)</label>
+                  <div style={{ background: '#12151E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center' }}
+                    onFocus={e => e.currentTarget.style.borderColor = '#F5A623'}
+                    onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'}
+                  >
+                    <input
+                      type="number"
+                      value={spotTotal}
+                      onChange={(e) => updateSpotTotal(e.target.value)}
+                      placeholder="0.00"
+                      style={{
+                        width: '100%',
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        fontSize: 16,
+                        color: '#fff',
+                        fontFamily: "'Space Mono', monospace"
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* Balance Summary */}
-              <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, fontFamily: "'Space Mono', monospace", color: '#8B91A8' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Avail. BON:</span>
-                  <span style={{ color: '#F0F2F8' }}>{(balances?.BON || 0).toFixed(2)} BON</span>
+              <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                  <span style={{ color: '#555D75' }}>Avail. BON:</span>
+                  <span style={{ color: '#F0F2F8', fontFamily: "'Space Mono', monospace" }}>{(balances?.BON || 0).toFixed(2)} BON</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Avail. {selectedToken.symbol}:</span>
-                  <span style={{ color: '#F0F2F8' }}>{(balances?.[selectedToken.symbol] || 0).toFixed(4)} {selectedToken.symbol}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                  <span style={{ color: '#555D75' }}>Avail. {selectedToken.symbol}:</span>
+                  <span style={{ color: '#F0F2F8', fontFamily: "'Space Mono', monospace" }}>{(balances?.[selectedToken.symbol] || 0).toFixed(4)} {selectedToken.symbol}</span>
                 </div>
               </div>
 
@@ -1917,19 +2140,31 @@ export default function Swap() {
                 onClick={executeSpotSwap}
                 style={{
                   width: '100%',
-                  padding: '12px 0',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  fontWeight: 700,
+                  padding: '14px',
+                  borderRadius: 10,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  letterSpacing: '0.05em',
                   textTransform: 'uppercase',
                   border: 'none',
                   cursor: 'pointer',
-                  backgroundColor: tradeLoading ? '#12151E' : spotTab === 'buy' ? '#00D084' : '#FF4757',
-                  color: tradeLoading ? '#555D75' : '#080A0F',
-                  boxShadow: tradeLoading ? 'none' : spotTab === 'buy' ? '0 0 16px rgba(0,208,132,0.2)' : '0 0 16px rgba(255,71,87,0.2)'
+                  transition: 'filter 0.2s',
+                  backgroundColor: tradeLoading
+                    ? '#12151E'
+                    : !isConnected
+                      ? '#F5A623'
+                      : spotTab === 'buy' ? '#00D084' : '#FF4757',
+                  color: tradeLoading
+                    ? '#555D75'
+                    : !isConnected
+                      ? '#000'
+                      : spotTab === 'buy' ? '#000' : '#fff',
+                  boxShadow: tradeLoading ? 'none' : !isConnected ? '0 0 16px rgba(245,166,35,0.2)' : spotTab === 'buy' ? '0 0 16px rgba(0,208,132,0.2)' : '0 0 16px rgba(255,71,87,0.2)'
                 }}
+                onMouseEnter={e => { if (!tradeLoading) e.currentTarget.style.filter = 'brightness(1.1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)'; }}
               >
-                {tradeLoading ? 'Swapping...' : !isConnected ? 'Connect Wallet' : `${spotTab} ${selectedToken?.symbol}`}
+                {tradeLoading ? 'Swapping...' : !isConnected ? 'Connect Wallet' : spotTab === 'buy' ? 'BUY BON' : 'SELL BON'}
               </button>
             </div>
           )}
